@@ -1,3 +1,5 @@
 pymysql 
 syreamlit
 pandas
+selenium web drivers
+python 3.11.0
