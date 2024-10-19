@@ -1,84 +1,85 @@
 import streamlit as st
-import pymysql
 import pandas as pd
 
-# Connect to MySQL database
-def get_connection():
-    return pymysql.connect(host='127.0.0.1', user='root', passwd='123456789', database='redbus')
+# Function to load CSV data for the selected state
+def load_csv_data(state_name):
+    # Map state name to the corresponding CSV file
+    state_csv_map = {
+        'Andhra Pradesh': 'ap_bus_details.csv',
+        'Assam': 'assam_bus_details.csv',
+        'Chandigarh': 'chandigarh_bus_details.csv',
+        'Himachal Pradesh': 'himachal_bus_details.csv',
+        'Karnataka': 'kaac_bus_details.csv',
+        'Kerala': 'kerala_bus_details.csv',
+        'Meghalaya': 'meghalaya_bus_details.csv',
+        'Rajasthan': 'rajastan_bus_details.csv',
+        'Telangana': 'telangana_bus_details.csv',
+        'West Bengal': 'wb_bus_details.csv'
+    }
 
-# Function to fetch route names starting with a specific letter, arranged alphabetically
-def fetch_route_names(connection, starting_letter):
-    query = f"SELECT DISTINCT Route_Name FROM bus_routes WHERE Route_Name LIKE '{starting_letter}%' ORDER BY Route_Name"
-    route_names = pd.read_sql(query, connection)['Route_Name'].tolist()
-    return route_names
+    # Load the corresponding CSV file into a DataFrame
+    csv_file = state_csv_map.get(state_name)
+    if csv_file:
+        try:
+            state_data = pd.read_csv(csv_file)
+            return state_data
+        except FileNotFoundError:
+            st.error(f"CSV file for {state_name} not found!")
+            return pd.DataFrame()  # Return an empty DataFrame if file not found
+    else:
+        st.error(f"No CSV mapping found for {state_name}")
+        return pd.DataFrame()
 
-# Function to fetch data from MySQL based on selected Route_Name and price sort order
-def fetch_data(connection, route_name, price_sort_order):
-    price_sort_order_sql = "ASC" if price_sort_order == "Low to High" else "DESC"
-    query = f"SELECT * FROM bus_routes WHERE Route_Name = %s ORDER BY Star_Rating DESC, Price {price_sort_order_sql}"
-    df = pd.read_sql(query, connection, params=(route_name,))
-    return df
+# Streamlit app
+state_options = ['Andhra Pradesh', 'Assam', 'Chandigarh', 'Himachal Pradesh', 
+                 'Karnataka', 'Kerala', 'Meghalaya', 'Rajasthan', 'Telangana', 'West Bengal']
 
-# Function to filter data based on Star_Rating and Bus_Type
-def filter_data(df, star_ratings, bus_types):
-    if star_ratings:
-        df = df[df['Star_Rating'].isin(star_ratings)]
-    if bus_types:
-        df = df[df['Bus_Type'].isin(bus_types)]
-    return df
+ # Title of the app
+st.markdown("<h1 style='color: red;'>RED_BUS</h1>", unsafe_allow_html=True)
 
-# Main Streamlit app
-def main():
-    st.header('Easy and Secure Online Bus Tickets Booking')
 
-    connection = get_connection()
+# Create a dropdown menu for selecting a state
+selected_state = st.selectbox("Select a state", state_options)
 
-    try:
-        # Sidebar - Input for starting letter
-        starting_letter = st.sidebar.text_input('Enter starting letter of Route Name', 'A')
+if selected_state:
+    state_data = load_csv_data(selected_state)
 
-        # Fetch route names starting with the specified letter
-        if starting_letter:
-            route_names = fetch_route_names(connection, starting_letter.upper())
+    # Check if the data is not empty
+    if not state_data.empty:
+        # Create two columns: left for the data, right for the filters
+        left_col, right_col = st.columns([3, 1])
 
-            if route_names:
-                # Sidebar - Selectbox for Route_Name
-                selected_route = st.sidebar.radio('Select Route Name', route_names)
+        with left_col:
+            st.write(f"Data for {selected_state}")
+            st.dataframe(state_data)
 
-                if selected_route:
-                    # Sidebar - Selectbox for sorting preference
-                    price_sort_order = st.sidebar.selectbox('Sort by Price', ['Low to High', 'High to Low'])
+        with right_col:
+            st.write("Filters")
 
-                    # Fetch data based on selected Route_Name and price sort order
-                    data = fetch_data(connection, selected_route, price_sort_order)
+            # Step 5: Create filters (dropdowns) based on the data columns
+            if all(col in state_data.columns for col in ["Route_Name", "Bus_Name", "Bus_Type", "Price"]):
 
-                    if not data.empty:
-                        # Display data table with a subheader
-                        st.write(f"### Data for Route: {selected_route}")
-                        st.write(data)
+                # Dropdown for filtering by Route Name
+                route_name = st.selectbox("Select Route Name", state_data["Route_Name"].unique())
+                filtered_data = state_data[state_data["Route_Name"] == route_name]
 
-                        # Filter by Star_Rating and Bus_Type
-                        star_ratings = data['Star_Rating'].unique().tolist()
-                        selected_ratings = st.multiselect('Filter by Star Rating', star_ratings)
+                # Dropdown for filtering by Bus Name
+                bus_name = st.selectbox("Select Bus Name", filtered_data["Bus_Name"].unique())
+                filtered_data = filtered_data[filtered_data["Bus_Name"] == bus_name]
 
-                        bus_types = data['Bus_Type'].unique().tolist()
-                        selected_bus_types = st.multiselect('Filter by Bus Type', bus_types)
+                # Dropdown for filtering by Bus Type
+                bus_type = st.selectbox("Select Bus Type", filtered_data["Bus_Type"].unique())
+                filtered_data = filtered_data[filtered_data["Bus_Type"] == bus_type]
 
-                        # Apply filters if selected
-                        filtered_data = filter_data(data, selected_ratings, selected_bus_types)
-                        if not filtered_data.empty:
-                            # Display filtered data table with a subheader
-                            st.write(f"### Filtered Data for Star Rating: {selected_ratings} and Bus Type: {selected_bus_types}")
-                            st.write(filtered_data)
-                        else:
-                            st.write("No data available with the selected filters.")
-                    else:
-                        st.write(f"No data found for Route: {selected_route} with the specified price sort order.")
+                # Dropdown for filtering by Price
+                price = st.selectbox("Select Price", filtered_data["Price"].unique())
+                filtered_data = filtered_data[filtered_data["Price"] == price]
+
+                # Step 6: Display the filtered data in the left column
+                with left_col:
+                    st.write("Filtered Data")
+                    st.dataframe(filtered_data)  # Display the filtered data
             else:
-                st.write("No routes found starting with the specified letter.")
-    finally:
-        connection.close()
-
-if __name__ == '__main__':
-    main()
-
+                st.error("One or more required columns are missing in the data.")
+    else:
+        st.write(f"No data available for {selected_state}")
